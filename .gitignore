@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.log
+.venv/
+venv/
+env/
+.env
+sessions/*.log
+reg_results.txt
+*.txt
+!requirements.txt
+!runtime.txt
+.DS_Store
