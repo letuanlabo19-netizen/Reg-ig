@@ -220,21 +220,31 @@ function setStatus(tool, status, sessionId = null) {
 }
 
 function buildConfig(tool) {
+    const smsToken = (getCfg(tool, 'cfg-sms-token')?.value || '').trim();
+    const countryId = (getCfg(tool, 'cfg-country-id')?.value || '0').trim();
+    const appId = (getCfg(tool, 'cfg-app-id')?.value || '12').trim();
+
     const proxiesRaw = (getCfg(tool, 'cfg-proxies')?.value || '').trim();
     const proxies = proxiesRaw.split('\n').map(s => s.trim()).filter(Boolean);
 
     const avatarsRaw = (getCfg(tool, 'cfg-avatars')?.value || '').trim();
     const avatars = avatarsRaw.split('\n').map(s => s.trim()).filter(Boolean);
 
-    const password = (getCfg(tool, 'cfg-password')?.value || 'Pass{rand}!').trim();
+    const usernamePattern = (getCfg(tool, 'cfg-username')?.value || 'user{rand}').trim();
+    const passwordPattern = (getCfg(tool, 'cfg-password')?.value || 'Pass{rand}!').trim();
     const count = parseInt(getCfg(tool, 'cfg-count')?.value || '1');
+    const delay = parseInt(getCfg(tool, 'cfg-delay')?.value || '15');
 
     return {
+        sms_man_token: smsToken,
+        country_id: countryId,
+        app_id: appId,
         proxies: proxies,
         avatar_urls: avatars,
-        password_pattern: password,
+        username_pattern: usernamePattern,
+        password_pattern: passwordPattern,
         count: count,
-        email_provider: 'mailtm',
+        delay: delay,
     };
 }
 
@@ -245,10 +255,10 @@ $$('.btn-start').forEach(btn => {
 
         if (config.count < 1) { alert('⚠️ Số nick phải >= 1'); return; }
         if (config.avatar_urls.length === 0) {
-            if (!confirm('⚠️ Chưa nhập URL avatar — nick reg ra sẽ không có ảnh. Vẫn tiếp tục?')) return;
+            if (!confirm('⚠️ Chưa nhập URL avatar. Nick reg ra sẽ không có ảnh. Vẫn tiếp tục?')) return;
         }
         if (config.proxies.length === 0) {
-            if (!confirm('⚠️ Chưa nhập proxy — tỉ lệ sống sẽ ~0%. Vẫn tiếp tục?')) return;
+            if (!confirm('⚠️ Chưa nhập proxy. Tỉ lệ sống sẽ ~0%. Vẫn tiếp tục?')) return;
         }
 
         btn.disabled = true;
@@ -266,9 +276,10 @@ $$('.btn-start').forEach(btn => {
             if (term) {
                 term.innerHTML = '';
                 appendLine(term, `▶ Bắt đầu chạy [${tool}] — Session: ${data.session_id}`);
-                appendLine(term, `📋 Config: ${config.count} nick | ${config.proxies.length} proxy | ${config.avatar_urls.length} avatar`);
+                appendLine(term, `📋 Config: ${config.count} nick | ${config.proxies.length} proxy | ${config.avatar_urls.length} avatar | SMS: ${config.sms_man_token ? 'Có' : 'Không'}`);
             }
 
+            // Đợi 3s để tool khởi động + nhận config
             await new Promise(r => setTimeout(r, 3000));
             const configJson = JSON.stringify(config);
             await fetch(`/api/input/${data.session_id}`, {
@@ -279,7 +290,10 @@ $$('.btn-start').forEach(btn => {
             if (term) appendLine(term, `> [auto] Đã gửi config (${configJson.length} ký tự)`, now());
 
             $(`.tab-btn[data-tool="${tool}"]`).click();
-        } catch (e) { alert('Lỗi kết nối: ' + e.message); btn.disabled = false; }
+        } catch (e) {
+            alert('Lỗi kết nối: ' + e.message);
+            btn.disabled = false;
+        }
     });
 });
 
@@ -329,7 +343,8 @@ $$('.btn-save').forEach(btn => {
         if (!s) { alert('Chưa có session!'); return; }
         const res = await fetch(`/api/save/${s.sessionId}`, { method: 'POST' });
         const data = await res.json();
-        if (data.ok) alert('Đã lưu: ' + data.filename); else alert('Lỗi: ' + (data.error || ''));
+        if (data.ok) alert('Đã lưu: ' + data.filename);
+        else alert('Lỗi: ' + (data.error || ''));
     });
 });
 
@@ -375,7 +390,9 @@ socket.on('cleared', data => {
     if (tool) { const t = getTerm(tool); if (t) t.innerHTML = ''; }
 });
 
-const CFG_FIELDS = ['cfg-proxies', 'cfg-avatars', 'cfg-password', 'cfg-count'];
+// ================== LƯU CONFIG VÀO LOCALSTORAGE ==================
+const CFG_FIELDS = ['cfg-sms-token', 'cfg-country-id', 'cfg-app-id', 'cfg-proxies', 'cfg-avatars',
+                    'cfg-username', 'cfg-password', 'cfg-count', 'cfg-delay'];
 CFG_FIELDS.forEach(cls => {
     $$('.' + cls).forEach(input => {
         const tool = input.closest('.tool-panel')?.dataset.tool;
