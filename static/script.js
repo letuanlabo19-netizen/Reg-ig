@@ -32,57 +32,31 @@ function createEffectForPanel(canvas) {
     const flowers = [];
     const FLOWER_COLORS = ['#ff6b9d', '#ffd93d', '#a78bfa', '#ff8fab', '#f9a8d4'];
     function newFlower() {
-        return {
-            x: Math.random() * W, y: -20,
-            size: 6 + Math.random() * 8,
-            speedY: 0.4 + Math.random() * 0.8,
-            speedX: (Math.random() - 0.5) * 0.6,
-            rot: Math.random() * Math.PI * 2,
-            rotSpeed: (Math.random() - 0.5) * 0.05,
+        return { x: Math.random() * W, y: -20, size: 6 + Math.random() * 8,
+            speedY: 0.4 + Math.random() * 0.8, speedX: (Math.random() - 0.5) * 0.6,
+            rot: Math.random() * Math.PI * 2, rotSpeed: (Math.random() - 0.5) * 0.05,
             color: FLOWER_COLORS[Math.floor(Math.random() * FLOWER_COLORS.length)],
-            type: Math.random() < 0.5 ? 'flower' : 'petal'
-        };
+            type: Math.random() < 0.5 ? 'flower' : 'petal' };
     }
-    for (let i = 0; i < 8; i++) {
-        const f = newFlower();
-        f.y = Math.random() * H;
-        flowers.push(f);
-    }
+    for (let i = 0; i < 8; i++) { const f = newFlower(); f.y = Math.random() * H; flowers.push(f); }
 
     const hearts = [];
     function newHeart() {
-        return {
-            x: Math.random() * W, y: -20,
-            size: 6 + Math.random() * 7,
-            speedY: 0.6 + Math.random() * 1,
-            speedX: (Math.random() - 0.5) * 0.5,
+        return { x: Math.random() * W, y: -20, size: 6 + Math.random() * 7,
+            speedY: 0.6 + Math.random() * 1, speedX: (Math.random() - 0.5) * 0.5,
             color: ['#ef4444', '#ec4899', '#f43f5e', '#fb7185'][Math.floor(Math.random() * 4)],
-            alpha: 0.6 + Math.random() * 0.4,
-            pulse: Math.random() * Math.PI * 2
-        };
+            alpha: 0.6 + Math.random() * 0.4, pulse: Math.random() * Math.PI * 2 };
     }
-    for (let i = 0; i < 6; i++) {
-        const h = newHeart();
-        h.y = Math.random() * H;
-        hearts.push(h);
-    }
+    for (let i = 0; i < 6; i++) { const h = newHeart(); h.y = Math.random() * H; hearts.push(h); }
 
     const bolts = [];
     function newBolt() {
-        const sx = Math.random() * W;
-        const segs = [];
-        let x = sx, y = 0;
-        const endY = H * (0.4 + Math.random() * 0.5);
-        while (y < endY) {
-            segs.push({ x, y });
-            x += (Math.random() - 0.5) * 60;
-            y += 10 + Math.random() * 20;
-        }
+        const sx = Math.random() * W; const segs = [];
+        let x = sx, y = 0; const endY = H * (0.4 + Math.random() * 0.5);
+        while (y < endY) { segs.push({ x, y }); x += (Math.random() - 0.5) * 60; y += 10 + Math.random() * 20; }
         return { segments: segs, life: 1, fadeSpeed: 0.03 + Math.random() * 0.02, width: 1 + Math.random() * 1.5 };
     }
-    function triggerLightning() {
-        for (let i = 0; i < 3; i++) setTimeout(() => bolts.push(newBolt()), i * 120);
-    }
+    function triggerLightning() { for (let i = 0; i < 3; i++) setTimeout(() => bolts.push(newBolt()), i * 120); }
 
     function drawLightning(bolt, color) {
         if (bolt.segments.length < 2) return;
@@ -92,15 +66,13 @@ function createEffectForPanel(canvas) {
         ctx.lineWidth = bolt.width;
         ctx.shadowBlur = 15;
         ctx.shadowColor = color;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(bolt.segments[0].x, bolt.segments[0].y);
         for (let i = 1; i < bolt.segments.length; i++) ctx.lineTo(bolt.segments[i].x, bolt.segments[i].y);
         ctx.stroke();
         ctx.strokeStyle = 'rgba(255,255,255,' + bolt.life + ')';
-        ctx.lineWidth = bolt.width * 0.4;
-        ctx.shadowBlur = 0;
+        ctx.lineWidth = bolt.width * 0.4; ctx.shadowBlur = 0;
         ctx.beginPath();
         ctx.moveTo(bolt.segments[0].x, bolt.segments[0].y);
         for (let i = 1; i < bolt.segments.length; i++) ctx.lineTo(bolt.segments[i].x, bolt.segments[i].y);
@@ -109,50 +81,35 @@ function createEffectForPanel(canvas) {
     }
 
     function drawFlower(f) {
-        ctx.save();
-        ctx.translate(f.x, f.y);
-        ctx.rotate(f.rot);
-        ctx.globalAlpha = 0.85;
-        ctx.fillStyle = f.color;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = f.color;
+        ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+        ctx.globalAlpha = 0.85; ctx.fillStyle = f.color;
+        ctx.shadowBlur = 8; ctx.shadowColor = f.color;
         if (f.type === 'petal') {
-            ctx.beginPath();
-            ctx.ellipse(0, 0, f.size, f.size * 0.5, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.beginPath(); ctx.ellipse(0, 0, f.size, f.size * 0.5, 0, 0, Math.PI * 2); ctx.fill();
         } else {
             for (let i = 0; i < 5; i++) {
-                ctx.save();
-                ctx.rotate((Math.PI * 2 / 5) * i);
-                ctx.beginPath();
-                ctx.ellipse(0, -f.size * 0.5, f.size * 0.4, f.size * 0.7, 0, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.save(); ctx.rotate((Math.PI * 2 / 5) * i);
+                ctx.beginPath(); ctx.ellipse(0, -f.size * 0.5, f.size * 0.4, f.size * 0.7, 0, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
             }
             ctx.fillStyle = '#ffd93d';
-            ctx.beginPath();
-            ctx.arc(0, 0, f.size * 0.25, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(0, 0, f.size * 0.25, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
     }
 
     function drawHeart(h) {
-        ctx.save();
-        ctx.translate(h.x, h.y);
+        ctx.save(); ctx.translate(h.x, h.y);
         const s = h.size + Math.sin(h.pulse) * 1.2;
-        ctx.globalAlpha = h.alpha;
-        ctx.fillStyle = h.color;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = h.color;
+        ctx.globalAlpha = h.alpha; ctx.fillStyle = h.color;
+        ctx.shadowBlur = 10; ctx.shadowColor = h.color;
         ctx.beginPath();
         ctx.moveTo(0, s * 0.3);
         ctx.bezierCurveTo(0, 0, -s * 0.5, 0, -s * 0.5, s * 0.3);
         ctx.bezierCurveTo(-s * 0.5, s * 0.7, 0, s * 1.1, 0, s * 1.3);
         ctx.bezierCurveTo(0, s * 1.1, s * 0.5, s * 0.7, s * 0.5, s * 0.3);
         ctx.bezierCurveTo(s * 0.5, 0, 0, 0, 0, s * 0.3);
-        ctx.fill();
-        ctx.restore();
+        ctx.fill(); ctx.restore();
     }
 
     function loop() {
@@ -160,16 +117,12 @@ function createEffectForPanel(canvas) {
         if (ACTIVE && W > 0 && H > 0) {
             ACCENT = getAccent();
             for (const f of flowers) {
-                f.y += f.speedY;
-                f.x += f.speedX + Math.sin(f.y * 0.02) * 0.3;
-                f.rot += f.rotSpeed;
+                f.y += f.speedY; f.x += f.speedX + Math.sin(f.y * 0.02) * 0.3; f.rot += f.rotSpeed;
                 if (f.y > H + 30) Object.assign(f, newFlower());
                 drawFlower(f);
             }
             for (const h of hearts) {
-                h.y += h.speedY;
-                h.x += h.speedX + Math.sin(h.y * 0.02) * 0.3;
-                h.pulse += 0.08;
+                h.y += h.speedY; h.x += h.speedX + Math.sin(h.y * 0.02) * 0.3; h.pulse += 0.08;
                 if (h.y > H + 30) Object.assign(h, newHeart());
                 drawHeart(h);
             }
@@ -195,37 +148,23 @@ $$('.tool-panel').forEach(panel => {
     const tool = panel.dataset.tool;
     const cForm = panel.querySelector('.fx-canvas-form');
     const cTerm = panel.querySelector('.fx-canvas-term');
-    fxInstances[tool] = {
-        form: createEffectForPanel(cForm),
-        term: createEffectForPanel(cTerm)
-    };
+    fxInstances[tool] = { form: createEffectForPanel(cForm), term: createEffectForPanel(cTerm) };
 });
 
-function fxStart(tool) {
-    const fx = fxInstances[tool];
-    if (fx) { if (fx.form) fx.form.start(); if (fx.term) fx.term.start(); }
-}
-function fxStop(tool) {
-    const fx = fxInstances[tool];
-    if (fx) { if (fx.form) fx.form.stop(); if (fx.term) fx.term.stop(); }
-}
+function fxStart(tool) { const fx = fxInstances[tool]; if (fx) { if (fx.form) fx.form.start(); if (fx.term) fx.term.start(); } }
+function fxStop(tool) { const fx = fxInstances[tool]; if (fx) { if (fx.form) fx.form.stop(); if (fx.term) fx.term.stop(); } }
 
-// ================== COLOR PICKER ==================
 (function initColorPicker() {
     const picker = document.getElementById('theme-color');
     if (!picker) return;
     const saved = localStorage.getItem('theme_accent');
-    if (saved) {
-        document.documentElement.style.setProperty('--accent', saved);
-        picker.value = saved;
-    }
+    if (saved) { document.documentElement.style.setProperty('--accent', saved); picker.value = saved; }
     picker.addEventListener('input', (e) => {
         document.documentElement.style.setProperty('--accent', e.target.value);
         localStorage.setItem('theme_accent', e.target.value);
     });
 })();
 
-// ================== LINE CLASSIFY ==================
 function classifyLine(line) {
     if (/\b(traceback|exception|error|lỗi|die|fail|thất bại)\b/i.test(line)) return 'err';
     if (/\b(warn|cảnh báo|retry|timeout|chậm)\b/i.test(line)) return 'warn';
@@ -244,21 +183,15 @@ function appendLine(termEl, line, ts = null) {
 
 setInterval(() => { const el = $('#clock'); if (el) el.textContent = now(); }, 1000);
 
-// ================== TAB SWITCH ==================
 $$('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const tool = btn.dataset.tool;
         $$('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
         $$('.tool-panel').forEach(p => p.classList.toggle('active', p.dataset.tool === tool));
-        setTimeout(() => {
-            const fx = fxInstances[tool];
-            if (fx) { if (fx.form) { const r = fx.form; } }
-        }, 100);
     });
 });
 $$('.tab-btn')[0]?.click();
 
-// ================== HELPERS ==================
 function getPanel(tool) { return $(`.tool-panel[data-tool="${tool}"]`); }
 function getTerm(tool) { const p = getPanel(tool); return p ? p.querySelector('.terminal') : null; }
 function getStatusBadge(tool) { return $(`.session-info[data-tool="${tool}"] .status-badge`); }
@@ -286,64 +219,33 @@ function setStatus(tool, status, sessionId = null) {
     if (form) form.querySelectorAll('input, textarea, select').forEach(el => el.disabled = isRunning);
 }
 
-// ================== BUILD CONFIG JSON ==================
 function buildConfig(tool) {
-    const smsToken = (getCfg(tool, 'cfg-sms-token')?.value || '').trim();
-    const countryId = (getCfg(tool, 'cfg-country-id')?.value || '0').trim();
-    const appId = (getCfg(tool, 'cfg-app-id')?.value || '12').trim();
-    const use1sec = getCfg(tool, 'cfg-email-1secmail')?.checked;
-    const useMailtm = getCfg(tool, 'cfg-email-mailtm')?.checked;
-    let emailProvider = 'both';
-    if (use1sec && !useMailtm) emailProvider = '1secmail';
-    else if (!use1sec && useMailtm) emailProvider = 'mailtm';
-    else if (!use1sec && !useMailtm) emailProvider = '1secmail';
-
     const proxiesRaw = (getCfg(tool, 'cfg-proxies')?.value || '').trim();
     const proxies = proxiesRaw.split('\n').map(s => s.trim()).filter(Boolean);
-    const proxy = proxies.length > 0 ? proxies[0] : '';
 
     const avatarsRaw = (getCfg(tool, 'cfg-avatars')?.value || '').trim();
     const avatars = avatarsRaw.split('\n').map(s => s.trim()).filter(Boolean);
 
-    const captionsRaw = (getCfg(tool, 'cfg-captions')?.value || '').trim();
-    const captions = captionsRaw.split('\n').map(s => s.trim()).filter(Boolean);
-
-    const usernamePattern = (getCfg(tool, 'cfg-username-pattern')?.value || 'user{rand}').trim();
-    const passwordPattern = (getCfg(tool, 'cfg-password-pattern')?.value || 'Pass{rand}!').trim();
+    const password = (getCfg(tool, 'cfg-password')?.value || 'Pass{rand}!').trim();
     const count = parseInt(getCfg(tool, 'cfg-count')?.value || '1');
-    const threads = parseInt(getCfg(tool, 'cfg-threads')?.value || '1');
-    const delay = parseInt(getCfg(tool, 'cfg-delay')?.value || '15');
 
     return {
-        email_provider: emailProvider,
-        sms_man_token: smsToken,
-        country_id: countryId,
-        app_id: appId,
-        proxy: proxy,
         proxies: proxies,
         avatar_urls: avatars,
-        captions: captions,
-        username_pattern: usernamePattern,
-        password_pattern: passwordPattern,
+        password_pattern: password,
         count: count,
-        threads: threads,
-        delay: delay,
+        email_provider: 'mailtm',
     };
 }
 
-// ================== START ==================
 $$('.btn-start').forEach(btn => {
     btn.addEventListener('click', async () => {
         const tool = btn.dataset.tool;
         const config = buildConfig(tool);
 
-        // Validate
         if (config.count < 1) { alert('⚠️ Số nick phải >= 1'); return; }
         if (config.avatar_urls.length === 0) {
             if (!confirm('⚠️ Chưa nhập URL avatar — nick reg ra sẽ không có ảnh. Vẫn tiếp tục?')) return;
-        }
-        if (config.captions.length === 0) {
-            if (!confirm('⚠️ Chưa nhập caption — tool sẽ dùng caption mặc định. Vẫn tiếp tục?')) return;
         }
         if (config.proxies.length === 0) {
             if (!confirm('⚠️ Chưa nhập proxy — tỉ lệ sống sẽ ~0%. Vẫn tiếp tục?')) return;
@@ -358,18 +260,16 @@ $$('.btn-start').forEach(btn => {
             state[tool] = { sessionId: data.session_id, status: 'running' };
             setStatus(tool, 'running', data.session_id);
             socket.emit('join', { session_id: data.session_id });
-
             fxStart(tool);
 
             const term = getTerm(tool);
             if (term) {
                 term.innerHTML = '';
                 appendLine(term, `▶ Bắt đầu chạy [${tool}] — Session: ${data.session_id}`);
-                appendLine(term, `📋 Config: ${config.count} nick | ${config.threads} luồng | proxy: ${config.proxies.length}`);
+                appendLine(term, `📋 Config: ${config.count} nick | ${config.proxies.length} proxy | ${config.avatar_urls.length} avatar`);
             }
 
-            // Đợi 500ms cho process khởi động rồi gửi config JSON
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 3000));
             const configJson = JSON.stringify(config);
             await fetch(`/api/input/${data.session_id}`, {
                 method: 'POST',
@@ -379,40 +279,30 @@ $$('.btn-start').forEach(btn => {
             if (term) appendLine(term, `> [auto] Đã gửi config (${configJson.length} ký tự)`, now());
 
             $(`.tab-btn[data-tool="${tool}"]`).click();
-        } catch (e) {
-            alert('Lỗi kết nối: ' + e.message);
-            btn.disabled = false;
-        }
+        } catch (e) { alert('Lỗi kết nối: ' + e.message); btn.disabled = false; }
     });
 });
 
-// ================== TEST PROXY ==================
 $$('.btn-test-proxy').forEach(btn => {
     btn.addEventListener('click', async () => {
         const panel = btn.closest('.tool-panel');
         const input = panel.querySelector('.cfg-test-proxy');
         const proxy = (input?.value || '').trim();
         if (!proxy) { alert('⚠️ Nhập proxy để test'); return; }
-        btn.disabled = true;
-        btn.textContent = 'Đang test...';
+        btn.disabled = true; btn.textContent = 'Đang test...';
         try {
             const res = await fetch('/api/test-proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ proxy })
             });
             const data = await res.json();
             if (data.ok) alert('✅ Proxy OK!\nIP: ' + data.ip);
             else alert('❌ Proxy die!\n' + (data.error || ''));
-        } catch (e) {
-            alert('Lỗi: ' + e.message);
-        }
-        btn.disabled = false;
-        btn.textContent = 'Test Proxy';
+        } catch (e) { alert('Lỗi: ' + e.message); }
+        btn.disabled = false; btn.textContent = 'Test Proxy';
     });
 });
 
-// ================== STOP ==================
 $$('.btn-stop').forEach(btn => {
     btn.addEventListener('click', async () => {
         const tool = btn.dataset.tool;
@@ -424,7 +314,6 @@ $$('.btn-stop').forEach(btn => {
     });
 });
 
-// ================== CLEAR ==================
 $$('.btn-clear').forEach(btn => {
     btn.addEventListener('click', () => {
         const tool = btn.dataset.tool;
@@ -434,7 +323,6 @@ $$('.btn-clear').forEach(btn => {
     });
 });
 
-// ================== SAVE ==================
 $$('.btn-save').forEach(btn => {
     btn.addEventListener('click', async () => {
         const tool = btn.dataset.tool; const s = state[tool];
@@ -445,7 +333,6 @@ $$('.btn-save').forEach(btn => {
     });
 });
 
-// ================== STDIN ==================
 function sendStdin(tool) {
     const input = $(`.stdin-input[data-tool="${tool}"]`); if (!input) return;
     const text = input.value; const s = state[tool]; if (!s || !s.sessionId) return;
@@ -461,7 +348,6 @@ $$('.stdin-input').forEach(inp => inp.addEventListener('keydown', e => {
     if (e.key === 'Enter') sendStdin(inp.dataset.tool);
 }));
 
-// ================== SOCKET ==================
 socket.on('output', data => {
     const { session_id, line, ts } = data;
     const tool = Object.keys(state).find(k => state[k].sessionId === session_id);
@@ -489,10 +375,7 @@ socket.on('cleared', data => {
     if (tool) { const t = getTerm(tool); if (t) t.innerHTML = ''; }
 });
 
-// ================== AUTO SAVE CONFIG ==================
-const CFG_FIELDS = ['cfg-sms-token', 'cfg-country-id', 'cfg-app-id', 'cfg-proxies', 'cfg-avatars',
-                    'cfg-captions', 'cfg-username-pattern', 'cfg-password-pattern', 'cfg-count',
-                    'cfg-threads', 'cfg-delay'];
+const CFG_FIELDS = ['cfg-proxies', 'cfg-avatars', 'cfg-password', 'cfg-count'];
 CFG_FIELDS.forEach(cls => {
     $$('.' + cls).forEach(input => {
         const tool = input.closest('.tool-panel')?.dataset.tool;
@@ -501,16 +384,6 @@ CFG_FIELDS.forEach(cls => {
         const saved = localStorage.getItem(key);
         if (saved !== null) input.value = saved;
         input.addEventListener('input', () => localStorage.setItem(key, input.value));
-    });
-});
-['cfg-email-1secmail', 'cfg-email-mailtm'].forEach(cls => {
-    $$('.' + cls).forEach(cb => {
-        const tool = cb.closest('.tool-panel')?.dataset.tool;
-        if (!tool) return;
-        const key = `ta_cfg_${tool}_${cls}`;
-        const saved = localStorage.getItem(key);
-        if (saved !== null) cb.checked = saved === 'true';
-        cb.addEventListener('change', () => localStorage.setItem(key, cb.checked));
     });
 });
 
