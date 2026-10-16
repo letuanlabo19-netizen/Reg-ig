@@ -6,12 +6,8 @@ import time
 import threading
 import subprocess
 import tempfile
-import random
-import string
-import re
-import hashlib
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
@@ -26,14 +22,7 @@ TEMP_TOOLS_DIR = os.path.join(tempfile.gettempdir(), "ta_tool_embedded")
 os.makedirs(TEMP_TOOLS_DIR, exist_ok=True)
 
 
-# ============================================================================
-# ==================== TOOL: IG REG (WEB API) ================================
-# ============================================================================
 TOOL_CODE_IG_REG = r'''# -*- coding: utf-8 -*-
-"""
-IG REG TOOL - Instagram Account Creator (Web API + Email 10p)
-Dựa trên tool gốc của XAIBO, sửa để chạy qua web
-"""
 import os
 import sys
 import time
@@ -42,10 +31,17 @@ import random
 import string
 import re
 import uuid
-import requests
+import hashlib
 from datetime import datetime
 
-# ANSI
+import requests
+try:
+    from curl_cffi import requests as cf_requests
+    CF_AVAILABLE = True
+except ImportError:
+    cf_requests = None
+    CF_AVAILABLE = False
+
 red = "\033[1;31m"; green = "\033[1;32m"; yellow = "\033[1;33m"
 cyan = "\033[1;36m"; blue = "\033[1;34m"; white = "\033[0;37m"; reset = "\033[0m"
 
@@ -53,6 +49,106 @@ def log(msg):
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] {msg}")
     sys.stdout.flush()
+
+FINGERPRINT_FILE = "fingerprints.json"
+RESULTS_FILE = "reg_results.txt"
+
+
+# ================= MÁY ẢO =================
+DEVICES_ANDROID = [
+    {"brand": "Xiaomi", "model": "Redmi Note 7", "device": "lavender", "android": "9", "sdk": 28, "dpi": 480, "w": 1080, "h": 1920, "build": "PKQ1.180904.001"},
+    {"brand": "Samsung", "model": "SM-G991B", "device": "o1s", "android": "11", "sdk": 30, "dpi": 420, "w": 1080, "h": 2340, "build": "RP1A.200720.012"},
+    {"brand": "Samsung", "model": "SM-A525F", "device": "a52q", "android": "11", "sdk": 30, "dpi": 405, "w": 1080, "h": 2400, "build": "RP1A.200720.012"},
+    {"brand": "Xiaomi", "model": "POCO X3 NFC", "device": "surya", "android": "10", "sdk": 29, "dpi": 440, "w": 1080, "h": 2400, "build": "QKQ1.200512.002"},
+    {"brand": "OPPO", "model": "CPH2091", "device": "OP4A7A", "android": "10", "sdk": 29, "dpi": 400, "w": 1080, "h": 2400, "build": "QP1A.190711.020"},
+    {"brand": "Google", "model": "Pixel 5", "device": "redfin", "android": "11", "sdk": 30, "dpi": 440, "w": 1080, "h": 2340, "build": "RQ1A.201105.002"},
+    {"brand": "Huawei", "model": "MAR-LX1A", "device": "HWMAR", "android": "10", "sdk": 29, "dpi": 480, "w": 1080, "h": 2312, "build": "HUAWEIMAR-L21A"},
+    {"brand": "Realme", "model": "RMX2061", "device": "RMX2061L1", "android": "10", "sdk": 29, "dpi": 405, "w": 1080, "h": 2400, "build": "QP1A.190711.020"},
+    {"brand": "Vivo", "model": "vivo 1909", "device": "PD1948", "android": "9", "sdk": 28, "dpi": 480, "w": 1080, "h": 2340, "build": "PPR1.180610.011"},
+    {"brand": "OnePlus", "model": "AC2001", "device": "OnePlusNORD", "android": "10", "sdk": 29, "dpi": 420, "w": 1080, "h": 2400, "build": "QKQ1.200412.002"},
+]
+
+DEVICES_IOS = [
+    {"device": "iPhone15,2", "ios": "17_2", "build": "21C62", "webkit": "605.1.15"},
+    {"device": "iPhone15,3", "ios": "17_1", "build": "21B74", "webkit": "605.1.15"},
+    {"device": "iPhone14,7", "ios": "16_6", "build": "20G75", "webkit": "605.1.15"},
+    {"device": "iPhone14,2", "ios": "16_5", "build": "20F66", "webkit": "605.1.15"},
+    {"device": "iPhone13,2", "ios": "15_7", "build": "19H12", "webkit": "605.1.15"},
+    {"device": "iPhone13,4", "ios": "16_0", "build": "20A362", "webkit": "605.1.15"},
+    {"device": "iPhone12,1", "ios": "15_5", "build": "19F77", "webkit": "605.1.15"},
+]
+
+
+class DeviceFingerprint:
+    """Máy ảo - có thể sinh mới hoặc load từ dict"""
+
+    def __init__(self, data=None):
+        if data:
+            # Load từ file
+            self.platform = data["platform"]
+            self.device = data["device"]
+            self.uuid = data["uuid"]
+            self.phone_id = data["phone_id"]
+            self.adid = data["adid"]
+            self.guid = data["guid"]
+            self.android_id = data["android_id"]
+            self.machine_id = data["machine_id"]
+            self.device_id = data["device_id"]
+            self.waterfall_id = data["waterfall_id"]
+            self.session_id = data["session_id"]
+        else:
+            # Sinh mới
+            self.platform = random.choice(["android", "ios"])
+            self.device = random.choice(DEVICES_ANDROID if self.platform == "android" else DEVICES_IOS)
+            self.uuid = str(uuid.uuid4())
+            self.phone_id = str(uuid.uuid4())
+            self.adid = str(uuid.uuid4())
+            self.guid = str(uuid.uuid4())
+            self.android_id = hashlib.md5(str(uuid.uuid4()).encode()).hexdigest()[:16]
+            self.machine_id = self.android_id + hashlib.md5(str(uuid.uuid4()).encode()).hexdigest()[:8]
+            self.device_id = "android-" + self.android_id
+            self.waterfall_id = str(uuid.uuid4())
+            self.session_id = str(uuid.uuid4())
+
+    def to_dict(self):
+        return {
+            "platform": self.platform, "device": self.device, "uuid": self.uuid,
+            "phone_id": self.phone_id, "adid": self.adid, "guid": self.guid,
+            "android_id": self.android_id, "machine_id": self.machine_id,
+            "device_id": self.device_id, "waterfall_id": self.waterfall_id,
+            "session_id": self.session_id,
+        }
+
+    def get_user_agent(self):
+        if self.platform == "android":
+            d = self.device
+            return f'Mozilla/5.0 (Linux; Android {d["android"]}; {d["model"]} Build/{d["build"]}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+        else:
+            d = self.device
+            return f'Mozilla/5.0 ({d["device"]}; CPU iPhone OS {d["ios"]} like Mac OS X) AppleWebKit/{d["webkit"]} (KHTML, like Gecko) Version/{d["ios"].split("_")[0]}.0 Mobile/{d["build"]} Safari/{d["webkit"]}'
+
+    def get_headers_extra(self):
+        if self.platform == "android":
+            return {'sec-ch-ua-mobile': '?1', 'sec-ch-ua-platform': '"Android"',
+                    'sec-ch-ua': '"Chromium";v="120", "Not_A Brand";v="8"'}
+        else:
+            return {'sec-ch-ua-mobile': '?1', 'sec-ch-ua-platform': '"iOS"',
+                    'sec-ch-ua': '"Safari";v="17", "Not_A Brand";v="8"'}
+
+
+def load_fingerprints():
+    if os.path.exists(FINGERPRINT_FILE):
+        try:
+            with open(FINGERPRINT_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception: pass
+    return {}
+
+def save_fingerprints(data):
+    try:
+        with open(FINGERPRINT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception: pass
 
 
 class TempEmailGenerator:
@@ -62,75 +158,58 @@ class TempEmailGenerator:
         self.generated_usernames = set()
         self.email_tokens = {}
 
-    def generate_vietnamese_username(self) -> str:
+    def generate_vietnamese_username(self):
         ho = ['nguyen', 'tran', 'le', 'pham', 'hoang', 'huynh', 'phan', 'vu', 'vo', 'dang', 'bui', 'do', 'ho', 'ngo', 'duong', 'ly']
         ten_dem = ['thi', 'van', 'duc', 'minh', 'quoc', 'thanh', 'ngoc', 'bao', 'gia', 'khanh']
         ten = ['an', 'binh', 'chi', 'duong', 'giang', 'han', 'khang', 'lam', 'long', 'my', 'nhi', 'phong', 'quan', 'son', 'trang', 'uyen', 'vy', 'yen', 'anh', 'bao']
-        name_format = random.choice([1, 2, 3])
-        if name_format == 1:
-            username = f"{random.choice(ho)}{random.choice(ten_dem)}{random.choice(ten)}"
-        elif name_format == 2:
-            username = f"{random.choice(ho)}{random.choice(ten)}{random.choice(ten)}"
-        else:
-            username = f"{random.choice(ten)}{random.choice(ten_dem)}{random.choice(ho)}"
-        modifications = random.choice([1, 2])
-        if modifications == 1:
-            username = username + str(random.randint(10, 99))
-        else:
-            username = username + str(random.randint(100, 999))
-        if username in self.generated_usernames:
-            username = username + str(random.randint(1000, 9999))
-        self.generated_usernames.add(username)
-        return username
+        fmt = random.choice([1, 2, 3])
+        if fmt == 1: u = f"{random.choice(ho)}{random.choice(ten_dem)}{random.choice(ten)}"
+        elif fmt == 2: u = f"{random.choice(ho)}{random.choice(ten)}{random.choice(ten)}"
+        else: u = f"{random.choice(ten)}{random.choice(ten_dem)}{random.choice(ho)}"
+        u = u + str(random.randint(10, 999))
+        if u in self.generated_usernames: u = u + str(random.randint(1000, 9999))
+        self.generated_usernames.add(u)
+        return u
 
     def get_available_domains(self):
-        for attempt in range(3):
+        for _ in range(3):
             try:
                 r = self.session.get('https://api.mail.tm/domains', timeout=8)
                 if r.status_code == 200:
                     data = r.json()
                     domains = []
-                    if 'hydra:member' in data:
-                        domains = [d['domain'] for d in data['hydra:member'] if d.get('isActive')]
-                    elif isinstance(data, list):
-                        domains = [d['domain'] for d in data if d.get('isActive')]
-                    if domains:
-                        return domains
+                    if 'hydra:member' in data: domains = [d['domain'] for d in data['hydra:member'] if d.get('isActive')]
+                    elif isinstance(data, list): domains = [d['domain'] for d in data if d.get('isActive')]
+                    if domains: return domains
                 time.sleep(2)
-            except Exception:
-                time.sleep(2)
+            except Exception: time.sleep(2)
         return ['agristur.com', 'febbox.com', 'main.truf.biz', 'laste.ml', 'failing.com']
 
     def create_mailtm_account(self, username, domain):
-        for attempt in range(3):
+        for _ in range(3):
             try:
                 password = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(12))
-                account_data = {'address': f'{username}@{domain}', 'password': password}
-                r = self.session.post('https://api.mail.tm/accounts', json=account_data, timeout=12)
+                r = self.session.post('https://api.mail.tm/accounts',
+                                      json={'address': f'{username}@{domain}', 'password': password}, timeout=12)
                 if r.status_code == 201:
-                    token = self.get_mailtm_token(account_data['address'], password)
-                    info = {'email': account_data['address'], 'password': password, 'service': 'mailtm', 'domain': domain, 'token': token}
-                    if token:
-                        self.email_tokens[account_data['address']] = token
+                    token = self.get_mailtm_token(f'{username}@{domain}', password)
+                    info = {'email': f'{username}@{domain}', 'password': password, 'service': 'mailtm', 'domain': domain, 'token': token}
+                    if token: self.email_tokens[f'{username}@{domain}'] = token
                     return info
-                elif r.status_code == 422:
-                    return None
-            except Exception:
-                pass
+                elif r.status_code == 422: return None
+            except Exception: pass
             time.sleep(2)
         return None
 
     def get_mailtm_token(self, email, password):
-        if email in self.email_tokens:
-            return self.email_tokens[email]
+        if email in self.email_tokens: return self.email_tokens[email]
         try:
             r = self.session.post('https://api.mail.tm/token', json={'address': email, 'password': password}, timeout=10)
             if r.status_code == 200:
                 token = r.json().get('token')
                 self.email_tokens[email] = token
                 return token
-        except Exception:
-            pass
+        except Exception: pass
         return None
 
     def get_message_content(self, token, message_id):
@@ -139,38 +218,31 @@ class TempEmailGenerator:
             if r.status_code == 200:
                 data = r.json()
                 return data.get('text', '') or data.get('html', '')
-        except Exception:
-            pass
+        except Exception: pass
         return ''
 
     def get_all_messages(self, email_info):
         try:
             token = email_info.get('token') or self.get_mailtm_token(email_info['email'], email_info['password'])
-            if not token:
-                return []
+            if not token: return []
             r = self.session.get('https://api.mail.tm/messages', headers={'Authorization': f'Bearer {token}'}, timeout=10)
             if r.status_code == 200:
                 data = r.json()
                 msgs = data.get('hydra:member', []) if 'hydra:member' in data else (data if isinstance(data, list) else [])
-                try:
-                    msgs.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
-                except Exception:
-                    pass
+                try: msgs.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+                except Exception: pass
                 for msg in msgs[:3]:
                     mid = msg.get('id')
-                    if mid:
-                        msg['full_content'] = self.get_message_content(token, mid)
+                    if mid: msg['full_content'] = self.get_message_content(token, mid)
                 return msgs
-        except Exception:
-            pass
+        except Exception: pass
         return []
 
     def create_random_email(self):
-        for attempt in range(3):
+        for _ in range(3):
             try:
                 domains = self.get_available_domains()
-                if not domains:
-                    return None
+                if not domains: return None
                 username = self.generate_vietnamese_username()
                 domain = random.choice(domains)
                 info = self.create_mailtm_account(username, domain)
@@ -178,77 +250,49 @@ class TempEmailGenerator:
                     log(f"{green}[+] Mail: {info['email']}{reset}")
                     return info
                 time.sleep(1)
-            except Exception:
-                time.sleep(2)
+            except Exception: time.sleep(2)
         return None
 
 class InstagramAutoRegister:
     def __init__(self, config):
         self.config = config
-        self.base_headers = {
-            'accept': '*/*',
-            'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-            'content-type': 'application/x-www-form-urlencoded',
-            'origin': 'https://www.instagram.com',
-            'referer': 'https://www.instagram.com/accounts/emailsignup/',
-        }
-        self.base_headers['user-agent'] = self.generate_random_user_agent()
         self.email_generator = TempEmailGenerator()
         self.emails_pool = []
         self.current_email_index = 0
         self.displayed_message_ids = set()
         self.account_counter = 0
-
-        # Avatar URLs từ config (không dùng folder local)
         self.avatar_urls = config.get("avatar_urls", [])
-
-        # Proxy từ config
         self.proxies = config.get("proxies", [])
+        self.sms_man_token = config.get("sms_man_token", "").strip()
+        self.sms_country_id = str(config.get("country_id", "0"))
+        self.sms_app_id = str(config.get("app_id", "12"))
         self.current_proxy = None
+        self.current_proxy_str = ""
+        self.current_device_data = None
+        self.fingerprints = load_fingerprints()
 
-    def generate_random_user_agent(self):
-        devices = ["iPhone15,2", "iPhone15,3", "iPhone15,4", "iPhone15,5",
-                   "iPhone14,7", "iPhone14,8", "iPhone14,2", "iPhone14,3",
-                   "iPhone13,1", "iPhone13,2", "iPhone13,3", "iPhone13,4",
-                   "iPhone12,1", "iPhone12,3", "iPhone12,5", "iPhone12,8",
-                   "iPhone11,2", "iPhone11,6", "iPhone11,8"]
-        ios_versions = ["15_0", "15_1", "15_2", "15_3", "15_4", "15_5",
-                        "16_0", "16_1", "16_2", "16_3", "16_4",
-                        "17_0", "17_1", "17_2"]
-        webkit_versions = ["605.1.15", "606.1.15", "607.1.15"]
-        device = random.choice(devices)
-        ios_version = random.choice(ios_versions)
-        webkit_version = random.choice(webkit_versions)
-        mobile_builds = ["15E148", "16A366", "16B92", "17A577", "18A373", "19A346"]
-        mobile_build = random.choice(mobile_builds)
-        safari_versions = ["605.1", "606.1", "607.1", "608.1", "609.1", "610.1"]
-        safari_version = random.choice(safari_versions)
-        return f'Mozilla/5.0 ({device}; CPU iPhone OS {ios_version} like Mac OS X) AppleWebKit/{webkit_version} (KHTML, like Gecko) Version/{ios_version.split("_")[0]}.0 Mobile/{mobile_build} Safari/{safari_version}'
+    # ============== FINGERPRINT CỐ ĐỊNH ==============
+    def get_fingerprint_for_index(self, idx):
+        """Lấy máy ảo cố định theo index — lưu file để dùng lại"""
+        key = f"nick_{idx}"
+        if key in self.fingerprints:
+            data = self.fingerprints[key]
+            log(f"{cyan}[*] Load máy ảo cũ: {data['device'].get('model', data['device'].get('device'))}{reset}")
+            return DeviceFingerprint(data)
+        # Sinh mới
+        dev = DeviceFingerprint()
+        self.fingerprints[key] = dev.to_dict()
+        save_fingerprints(self.fingerprints)
+        log(f"{cyan}[*] Máy ảo mới: {dev.platform.upper()} - {dev.device.get('model', dev.device.get('device'))}{reset}")
+        return dev
 
-    def generate_android_user_agent(self):
-        devices = ["SM-G991B", "SM-G996B", "SM-G998B", "SM-F711B",
-                   "Pixel 6", "Pixel 6 Pro", "Pixel 7", "Pixel 7 Pro",
-                   "Mi 11", "Mi 12", "Redmi Note 11",
-                   "XQ-BC72", "XQ-BQ72"]
-        android_versions = ["11", "12", "13"]
-        webkit_versions = ["537.36", "538.1", "539.1"]
-        device = random.choice(devices)
-        android_version = random.choice(android_versions)
-        webkit_version = random.choice(webkit_versions)
-        build_numbers = ["RP1A.200720.012", "SP1A.210812.016", "TP1A.220624.014"]
-        build_number = random.choice(build_numbers)
-        return f'Mozilla/5.0 (Linux; Android {android_version}; {device} Build/{build_number}) AppleWebKit/{webkit_version} (KHTML, like Gecko) Chrome/{".".join(str(random.randint(100, 115)) for _ in range(3))} Mobile Safari/{webkit_version}'
-
-    def rotate_user_agent(self):
-        browser_type = random.choice(['ios', 'android'])
-        if browser_type == 'ios':
-            return self.generate_random_user_agent()
-        return self.generate_android_user_agent()
-
-    def get_random_proxy(self):
+    # ============== PROXY CỐ ĐỊNH ==============
+    def get_proxy_for_index(self, idx):
+        """Mỗi nick 1 proxy cố định"""
         if not self.proxies:
-            return None
-        proxy_str = random.choice(self.proxies).strip().strip('.')
+            return None, ""
+        # Round-robin: nick 1 → proxy 1, nick 2 → proxy 2...
+        proxy_str = self.proxies[idx % len(self.proxies)].strip().strip('.')
         parts = [p.strip() for p in proxy_str.split(':')]
         if len(parts) == 4:
             if '.' in parts[0]:
@@ -259,21 +303,44 @@ class InstagramAutoRegister:
             formatted = f"http://{proxy_str}"
         else:
             formatted = f"http://{proxy_str}"
-        return {"http": formatted, "https": formatted}
+        return {"http": formatted, "https": formatted}, proxy_str
 
-    def create_new_session(self):
-        self.session = requests.Session()
-        ua = self.rotate_user_agent()
-        self.base_headers['user-agent'] = ua
-        is_mobile = 'Mobile' in ua
-        platform = 'Android' if 'Android' in ua else 'iOS' if 'iPhone' in ua else 'Windows'
-        self.base_headers['sec-ch-ua-mobile'] = '?1' if is_mobile else '?0'
-        self.base_headers['sec-ch-ua-platform'] = f'"{platform}"'
+    # ============== SESSION VỚI CURL_CFFI ==============
+    def create_new_session(self, idx=0):
+        """Session với curl_cffi + proxy cố định + máy ảo cố định"""
+        # Máy ảo cố định theo index
+        self.current_device_data = self.get_fingerprint_for_index(idx)
+
+        if CF_AVAILABLE:
+            try:
+                self.session = cf_requests.Session(impersonate="chrome120")
+                log(f"{cyan}[*] Session: curl_cffi (Chrome){reset}")
+            except Exception as e:
+                log(f"{yellow}[!] curl_cffi lỗi: {e}{reset}")
+                self.session = requests.Session()
+        else:
+            self.session = requests.Session()
+            log(f"{yellow}[*] Session: requests{reset}")
+
+        ua = self.current_device_data.get_user_agent()
+        extra = self.current_device_data.get_headers_extra()
+
+        self.base_headers = {
+            'accept': '*/*',
+            'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+            'content-type': 'application/x-www-form-urlencoded',
+            'origin': 'https://www.instagram.com',
+            'referer': 'https://www.instagram.com/accounts/emailsignup/',
+            'user-agent': ua,
+        }
+        self.base_headers.update(extra)
         self.session.headers.update(self.base_headers)
-        self.current_proxy = self.get_random_proxy()
+
+        # Proxy cố định
+        self.current_proxy, self.current_proxy_str = self.get_proxy_for_index(idx)
         if self.current_proxy:
             self.session.proxies.update(self.current_proxy)
-            log(f"{cyan}[*] Proxy OK{reset}")
+            log(f"{cyan}[*] Proxy: {self.current_proxy_str[:40]}...{reset}")
 
     def wait_human(self, min_sec, max_sec):
         time.sleep(random.uniform(min_sec, max_sec))
@@ -282,89 +349,109 @@ class InstagramAutoRegister:
         ho = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Phan', 'Vũ', 'Võ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô', 'Dương', 'Lý']
         ten_dem = ['Thị', 'Văn', 'Đức', 'Minh', 'Quốc', 'Thanh', 'Ngọc', 'Bảo', 'Gia', 'Khánh']
         ten = ['An', 'Bình', 'Chi', 'Dương', 'Giang', 'Hân', 'Khang', 'Lam', 'Long', 'My', 'Nhi', 'Phong', 'Quân', 'Sơn', 'Trang', 'Uyên', 'Vy', 'Yến', 'Ánh', 'Bảo']
-        name_format = random.choice([1, 2, 3])
-        if name_format == 1:
-            return f"{random.choice(ho)} {random.choice(ten_dem)} {random.choice(ten)}"
-        elif name_format == 2:
-            return f"{random.choice(ho)} {random.choice(ten)} {random.choice(ten)}"
-        else:
-            return f"{random.choice(ten_dem)} {random.choice(ten)} {random.choice(ho)}"
+        fmt = random.choice([1, 2, 3])
+        if fmt == 1: return f"{random.choice(ho)} {random.choice(ten_dem)} {random.choice(ten)}"
+        elif fmt == 2: return f"{random.choice(ho)} {random.choice(ten)} {random.choice(ten)}"
+        else: return f"{random.choice(ten_dem)} {random.choice(ten)} {random.choice(ho)}"
 
     def remove_accents(self, text):
-        patterns = {
-            '[àáảãạăắằẵặẳâầấậẫẩ]': 'a',
-            '[đ]': 'd',
-            '[èéẻẽẹêềếểễệ]': 'e',
-            '[ìíỉĩị]': 'i',
-            '[òóỏõọôồốổỗộơờớởỡợ]': 'o',
-            '[ùúủũụưừứửữự]': 'u',
-            '[ỳýỷỹỵ]': 'y'
-        }
-        for pattern, replacement in patterns.items():
-            text = re.sub(pattern, replacement, text)
-            text = re.sub(pattern.upper(), replacement.upper(), text)
+        patterns = {'[àáảãạăắằẵặẳâầấậẫẩ]': 'a', '[đ]': 'd', '[èéẻẽẹêềếểễệ]': 'e',
+                    '[ìíỉĩị]': 'i', '[òóỏõọôồốổỗộơờớởỡợ]': 'o',
+                    '[ùúủũụưừứửữự]': 'u', '[ỳýỷỹỵ]': 'y'}
+        for p, r in patterns.items():
+            text = re.sub(p, r, text)
+            text = re.sub(p.upper(), r.upper(), text)
         return text
 
     def generate_username(self, first_name):
-        username = self.remove_accents(first_name).lower().replace(' ', '')
-        modifications = random.choice([1, 2, 3, 4, 5])
-        if modifications == 1:
-            username = username + '_' + str(random.randint(100, 999))
-        elif modifications == 2:
-            username = username + '.' + str(random.randint(100, 999))
-        elif modifications == 3:
-            username = username + str(random.randint(1000, 9999))
-        elif modifications == 4:
-            if len(username) > 4:
-                pos = random.randint(2, len(username) - 2)
-                username = username[:pos] + '_' + username[pos:] + str(random.randint(10, 99))
-        else:
-            username = username + random.choice(['', '_', '.']) + str(random.randint(1000, 9999))
-        return username
+        u = self.remove_accents(first_name).lower().replace(' ', '')
+        m = random.choice([1, 2, 3, 4, 5])
+        if m == 1: u = u + '_' + str(random.randint(100, 999))
+        elif m == 2: u = u + '.' + str(random.randint(100, 999))
+        elif m == 3: u = u + str(random.randint(1000, 9999))
+        elif m == 4:
+            if len(u) > 4:
+                pos = random.randint(2, len(u) - 2)
+                u = u[:pos] + '_' + u[pos:] + str(random.randint(10, 99))
+        else: u = u + random.choice(['', '_', '.']) + str(random.randint(1000, 9999))
+        return u
 
     def generate_random_date(self):
-        day = random.randint(1, 28)
-        month = random.randint(1, 12)
-        year = random.randint(1990, 2000)
-        return day, month, year
+        return random.randint(1, 28), random.randint(1, 12), random.randint(1990, 2000)
 
     def generate_device_id(self):
-        chars = string.ascii_lowercase + string.digits
-        return ''.join(random.choice(chars) for _ in range(20))
+        return ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(20))
 
     def generate_jazoest(self):
         return ''.join(random.choice(string.digits) for _ in range(5))
 
     def generate_web_session_id(self):
-        chars = string.ascii_lowercase + string.digits
-        return ''.join(random.choice(chars) for _ in range(6)) + ':' + ''.join(random.choice(chars) for _ in range(6)) + ':' + ''.join(random.choice(chars) for _ in range(6))
+        c = string.ascii_lowercase + string.digits
+        return ':'.join(''.join(random.choice(c) for _ in range(6)) for _ in range(3))
 
     def generate_random_csrf_token(self):
         patterns = [
             lambda: ''.join(random.choice(string.ascii_letters + string.digits + '_-') for _ in range(32)),
             lambda: ''.join(random.choice('0123456789abcdef') for _ in range(32)),
             lambda: ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(28)) + '==',
-            lambda: ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16)) + ':' + str(int(time.time()))
         ]
         return random.choice(patterns)()
+
+    # ============== SMS-MAN API ==============
+    def sms_man_request(self):
+        if not self.sms_man_token:
+            log(f"{red}[!] Không có SMS-Man token{reset}")
+            return None
+        try:
+            r = requests.get("https://api.sms-man.com/control/get-number",
+                             params={"token": self.sms_man_token, "country_id": self.sms_country_id,
+                                     "application_id": self.sms_app_id}, timeout=20)
+            data = r.json()
+            if "request_id" in data and "number" in data:
+                log(f"{green}[+] SMS-Man số: {data['number']} (id={data['request_id']}){reset}")
+                return data
+            log(f"{red}[!] SMS-Man lỗi: {str(data)[:200]}{reset}")
+            return None
+        except Exception as e:
+            log(f"{red}[!] SMS-Man lỗi: {e}{reset}")
+            return None
+
+    def sms_man_get_code(self, request_id, timeout=180):
+        if not self.sms_man_token: return None
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                r = requests.get("https://api.sms-man.com/control/get-sms",
+                                 params={"token": self.sms_man_token, "request_id": request_id}, timeout=15)
+                data = r.json()
+                code = data.get("sms_code", "") or data.get("code", "")
+                if code:
+                    code = re.sub(r'\D', '', str(code))[:6]
+                    if len(code) >= 4:
+                        log(f"{green}[+] SMS OTP: {code}{reset}")
+                        return code
+            except Exception: pass
+            time.sleep(5)
+        return None
+
+    def sms_man_set_status(self, request_id, status="used"):
+        if not self.sms_man_token: return
+        try:
+            requests.get("https://api.sms-man.com/control/set-status",
+                         params={"token": self.sms_man_token, "request_id": request_id, "status": status}, timeout=10)
+        except Exception: pass
 
     def get_initial_cookies_and_csrf(self):
         try:
             log(f"{yellow}[*] Khởi tạo session hữu cơ...{reset}")
-            user_agent = self.base_headers['user-agent']
             main_headers = {
                 'authority': 'www.instagram.com',
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-                'sec-ch-ua': self.session.headers.get('sec-ch-ua', '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"'),
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-                'sec-fetch-dest': 'document',
-                'sec-fetch-mode': 'navigate',
-                'sec-fetch-site': 'none',
-                'sec-fetch-user': '?1',
+                'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate',
+                'sec-fetch-site': 'none', 'sec-fetch-user': '?1',
                 'upgrade-insecure-requests': '1',
-                'user-agent': user_agent,
+                'user-agent': self.base_headers['user-agent'],
             }
             self.session.get('https://www.instagram.com/', headers=main_headers, timeout=30)
             self.wait_human(3, 7)
@@ -376,10 +463,8 @@ class InstagramAutoRegister:
                 csrf_token = self.session.cookies.get('csrftoken')
                 if not csrf_token:
                     m = re.search(r'"csrf_token":"([^"]+)"', r.text)
-                    if m:
-                        csrf_token = m.group(1)
-                if not csrf_token:
-                    csrf_token = self.generate_random_csrf_token()
+                    if m: csrf_token = m.group(1)
+                if not csrf_token: csrf_token = self.generate_random_csrf_token()
                 self.base_headers['x-csrftoken'] = csrf_token
                 self.web_session_id = self.generate_web_session_id()
                 if 'ig_nrcb' not in self.session.cookies:
@@ -390,68 +475,58 @@ class InstagramAutoRegister:
                 return True
             return False
         except Exception as e:
-            log(f"{red}[!] Lỗi session: {e}{reset}")
+            log(f"{red}[!] Session init lỗi: {e}{reset}")
             return False
 
     def generate_enc_password(self, password):
         timestamp = int(datetime.now().timestamp())
         return f"#PWD_INSTAGRAM_BROWSER:0:{timestamp}:{password}"
 
-    def save_result(self, username, first_name, email, password, cookie_str, twofa_secret, proxy_str):
-        """Lưu file đúng format: username|password|2fa|cookie"""
-        try:
-            line = f"{username}|{password}|{twofa_secret}|{cookie_str}"
-            with open("reg_results.txt", "a", encoding="utf-8") as f:
-                f.write(line + "\n")
-            log(f"{green}[+] Đã lưu: {username}{reset}")
-        except Exception as e:
-            log(f"{red}[!] Lỗi lưu: {e}{reset}")
-
     def attempt_signup(self, email, first_name, username, password):
         enc_password = self.generate_enc_password(password)
         data = {
-            'enc_password': enc_password,
-            'email': email,
-            'username': username,
-            'first_name': first_name,
-            'client_id': self.client_id,
-            'seamless_login_enabled': '1',
-            'opt_into_one_tap': 'false',
+            'enc_password': enc_password, 'email': email, 'username': username,
+            'first_name': first_name, 'client_id': self.client_id,
+            'seamless_login_enabled': '1', 'opt_into_one_tap': 'false',
             'jazoest': self.jazoest,
         }
         time.sleep(random.uniform(2, 3))
-        log(f"{cyan}[*] Đang gửi form đăng ký...{reset}")
-        self.wait_human(4, 9)
-        try:
-            r = self.session.post(
-                'https://www.instagram.com/api/v1/web/accounts/web_create_ajax/attempt/',
-                headers=self.base_headers, data=data, timeout=45
-            )
-            if r.status_code == 200:
-                try:
-                    result = r.json()
-                    if 'errors' in result:
-                        err = str(result['errors']).lower()
-                        if 'username' in err:
-                            log(f"{red}    Username trùng, thử lại{reset}")
-                            return None
-                        elif 'email' in err:
-                            log(f"{red}    Email đã dùng{reset}")
-                        elif 'spam' in err:
-                            log(f"{red}    Spam detect{reset}")
-                except Exception:
-                    pass
-            return r
-        except requests.RequestException as e:
-            log(f"{red}[!] Lỗi kết nối: {type(e).__name__}{reset}")
-            return None
+        log(f"{cyan}[*] Gửi form đăng ký...{reset}")
+        self.wait_human(3, 6)
+
+        for attempt in range(3):
+            try:
+                r = self.session.post(
+                    'https://www.instagram.com/api/v1/web/accounts/web_create_ajax/attempt/',
+                    headers=self.base_headers, data=data, timeout=45
+                )
+                log(f"{cyan}    HTTP {r.status_code}{reset}")
+                if r.status_code == 200:
+                    try:
+                        result = r.json()
+                        if 'errors' in result:
+                            err = str(result['errors']).lower()
+                            if 'username' in err:
+                                log(f"{red}    Username trùng{reset}")
+                                return None
+                            elif 'email' in err:
+                                log(f"{red}    Email đã dùng{reset}")
+                            elif 'spam' in err:
+                                log(f"{red}    Spam detect{reset}")
+                            else:
+                                log(f"{yellow}    Errors: {str(result['errors'])[:150]}{reset}")
+                    except Exception: pass
+                return r
+            except Exception as e:
+                log(f"{yellow}    Attempt {attempt+1}/3 lỗi: {type(e).__name__}: {str(e)[:100]}{reset}")
+                if attempt < 2: time.sleep(3); continue
+                log(f"{red}[!] Thử 3 lần fail, bỏ nick này{reset}")
+                return None
+        return None
 
     def check_age_eligibility(self):
         day, month, year = self.generate_random_date()
-        data = {
-            'day': str(day), 'month': str(month), 'year': str(year),
-            'jazoest': self.jazoest,
-        }
+        data = {'day': str(day), 'month': str(month), 'year': str(year), 'jazoest': self.jazoest}
         time.sleep(random.uniform(2, 4))
         try:
             return self.session.post(
@@ -462,7 +537,7 @@ class InstagramAutoRegister:
             return None
 
     def send_verification_email(self, email):
-        log(f"{yellow}[*] Gửi mã xác minh đến {email}...{reset}")
+        log(f"{yellow}[*] Gửi mã email đến {email}...{reset}")
         data = {'device_id': self.client_id, 'email': email, 'jazoest': self.jazoest}
         try:
             r = self.session.post(
@@ -475,8 +550,7 @@ class InstagramAutoRegister:
                     if result.get('email_sent') == True or result.get('status') == 'ok':
                         log(f"{green}[+] Email sent OK{reset}")
                         return True
-                except Exception:
-                    return True
+                except Exception: return True
             log(f"{red}[!] Send email fail: {r.status_code}{reset}")
             return False
         except Exception as e:
@@ -488,20 +562,18 @@ class InstagramAutoRegister:
         email_info = None
         for info in self.emails_pool:
             if info['email'] == email:
-                email_info = info
-                break
+                email_info = info; break
         if not email_info:
-            log(f"{red}[!] Không tìm thấy info email{reset}")
+            log(f"{red}[!] Không có info email{reset}")
             return None
         start = time.time()
         while time.time() - start < timeout:
             try:
                 messages = self.email_generator.get_all_messages(email_info)
                 for message in messages:
-                    msg_id = self.email_generator.get_message_id(message, 'mailtm')
+                    msg_id = message.get('id', '')
                     key = f"{email}_{msg_id}"
-                    if key in self.displayed_message_ids:
-                        continue
+                    if key in self.displayed_message_ids: continue
                     self.displayed_message_ids.add(key)
                     sender = message.get('from', {}).get('address', '')
                     subject = message.get('subject', '')
@@ -520,25 +592,16 @@ class InstagramAutoRegister:
         return None
 
     def extract_verification_code(self, content):
-        if not content:
-            return None
-        patterns = [
-            r'\b(\d{6})\b',
-            r'\b(\d{8})\b',
-            r'code[:\s]*[#]?(\d{6})',
-            r'mã[:\s]*[#]?(\d{6})',
-            r'is[:\s]*(\d{6})\b',
-            r'【(\d{6})】',
-            r'\[(\d{6})\]',
-        ]
+        if not content: return None
+        patterns = [r'\b(\d{6})\b', r'\b(\d{8})\b', r'code[:\s]*[#]?(\d{6})',
+                    r'mã[:\s]*[#]?(\d{6})', r'is[:\s]*(\d{6})\b',
+                    r'【(\d{6})】', r'\[(\d{6})\]']
         for p in patterns:
             m = re.findall(p, content, re.IGNORECASE)
-            if m:
-                return m[0]
+            if m: return m[0]
         all_nums = re.findall(r'\b\d{4,8}\b', content)
         for n in all_nums:
-            if len(n) == 6:
-                return n
+            if len(n) == 6: return n
         return None
 
     def is_instagram_message(self, sender, subject):
@@ -564,20 +627,12 @@ class InstagramAutoRegister:
         enc_password = self.generate_enc_password(password)
         day, month, year = self.generate_random_date()
         data = {
-            'enc_password': enc_password,
-            'day': str(day),
-            'email': email,
-            'failed_birthday_year_count': '{}',
-            'first_name': first_name,
-            'month': str(month),
-            'username': username,
-            'year': str(year),
-            'client_id': self.client_id,
-            'seamless_login_enabled': '1',
-            'tos_version': 'row',
-            'force_sign_up_code': code,
-            'extra_session_id': self.web_session_id,
-            'jazoest': self.jazoest,
+            'enc_password': enc_password, 'day': str(day), 'email': email,
+            'failed_birthday_year_count': '{}', 'first_name': first_name,
+            'month': str(month), 'username': username, 'year': str(year),
+            'client_id': self.client_id, 'seamless_login_enabled': '1',
+            'tos_version': 'row', 'force_sign_up_code': code,
+            'extra_session_id': self.web_session_id, 'jazoest': self.jazoest,
         }
         headers = self.base_headers.copy()
         headers['x-csrftoken'] = self.session.cookies.get('csrftoken', '')
@@ -590,9 +645,7 @@ class InstagramAutoRegister:
             if r.status_code == 200:
                 try:
                     result = r.json()
-                    account_created = result.get('account_created') == True
-                    has_user_id = result.get('user_id') is not None
-                    if account_created or has_user_id:
+                    if result.get('account_created') == True or result.get('user_id') is not None:
                         log(f"{green}[+] REG THÀNH CÔNG!{reset}")
                         return True, result
                     if 'errors' in result:
@@ -601,9 +654,8 @@ class InstagramAutoRegister:
                 except Exception as e:
                     log(f"{red}[!] Parse JSON lỗi: {e}{reset}")
                     return False, {}
-            else:
-                log(f"{red}[!] HTTP {r.status_code}{reset}")
-                return False, {}
+            log(f"{red}[!] HTTP {r.status_code}{reset}")
+            return False, {}
         except Exception as e:
             log(f"{red}[!] Lỗi complete: {e}{reset}")
             return False, {}
@@ -612,7 +664,6 @@ class InstagramAutoRegister:
         log(f"{yellow}[*] Check code...{reset}")
         r_check = self.check_confirmation_code(email, code)
         if not r_check:
-            log(f"{red}[!] Không kết nối được{reset}")
             return False
         if r_check.status_code == 200:
             try:
@@ -626,13 +677,10 @@ class InstagramAutoRegister:
                         post_ok = self.perform_post_registration_actions(username)
                         if post_ok:
                             self.account_counter += 1
-                            # Lấy cookie + 2FA
                             cookie_str = self.get_cookie_string()
                             twofa_secret = self.get_2fa_secret()
-                            proxy_str = ""
-                            if self.current_proxy:
-                                proxy_str = list(self.current_proxy.values())[0]
-                            self.save_result(username, first_name, email, password, cookie_str, twofa_secret, proxy_str)
+                            self.save_result(username, password, twofa_secret, cookie_str,
+                                             first_name, email, self.current_proxy_str)
                             return True
                         else:
                             log(f"{red}[!] Nick bị khoá sau reg{reset}")
@@ -648,7 +696,6 @@ class InstagramAutoRegister:
         return False
 
     def get_cookie_string(self):
-        """Lấy cookie string chuẩn"""
         try:
             cookies_dict = self.session.cookies.get_dict()
             important = ['csrftoken', 'sessionid', 'ds_user_id', 'ig_did', 'mid', 'datr']
@@ -658,65 +705,57 @@ class InstagramAutoRegister:
             return ""
 
     def get_2fa_secret(self):
-        """Lấy 2FA TOTP secret sau khi reg"""
         try:
-            log(f"{yellow}[*] Đang lấy 2FA secret...{reset}")
+            log(f"{yellow}[*] Lấy 2FA secret...{reset}")
             headers = self.base_headers.copy()
             headers['x-csrftoken'] = self.session.cookies.get('csrftoken', '')
             headers['x-ig-app-id'] = '936619743392459'
-            # Thử endpoint enable 2FA TOTP
-            r = self.session.post(
-                'https://www.instagram.com/api/v1/accounts/two_factor/enable/',
-                headers=headers,
-                data={"two_factor_type": "totp"},
-                timeout=20
-            )
+            r = self.session.get('https://www.instagram.com/api/v1/accounts/two_factor/seed/', headers=headers, timeout=20)
             if r.status_code == 200:
-                try:
-                    data = r.json()
-                    secret = data.get('totp_seed') or data.get('secret') or ""
-                    if secret:
-                        log(f"{green}[+] 2FA secret: {secret}{reset}")
-                        return secret
-                except Exception:
-                    pass
-            # Fallback: thử endpoint khác
-            r2 = self.session.get(
-                'https://www.instagram.com/api/v1/accounts/two_factor/seed/',
-                headers=headers, timeout=20
-            )
-            if r2.status_code == 200:
-                try:
-                    data2 = r2.json()
-                    secret = data2.get('totp_seed') or data2.get('secret') or ""
-                    if secret:
-                        log(f"{green}[+] 2FA secret: {secret}{reset}")
-                        return secret
-                except Exception:
-                    pass
-            log(f"{yellow}[!] Không lấy được 2FA secret{reset}")
+                data = r.json()
+                secret = data.get('totp_seed') or data.get('secret') or ""
+                if secret:
+                    log(f"{green}[+] 2FA: {secret}{reset}")
+                    return secret
             return ""
+        except Exception:
+            return ""
+
+    def save_result(self, username, password, twofa_secret, cookie_str, first_name, email, proxy_str):
+        """Lưu kết quả vào file reg_results.txt — format: username|password|2fa|cookie"""
+        try:
+            line = f"{username}|{password}|{twofa_secret}|{cookie_str}"
+            with open(RESULTS_FILE, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            # Lưu thêm info phụ vào file riêng
+            with open("reg_details.txt", "a", encoding="utf-8") as f:
+                f.write(f"=== {username} ===\n")
+                f.write(f"Password: {password}\n")
+                f.write(f"2FA Secret: {twofa_secret}\n")
+                f.write(f"Cookie: {cookie_str}\n")
+                f.write(f"Name: {first_name}\n")
+                f.write(f"Email: {email}\n")
+                f.write(f"Proxy: {proxy_str}\n")
+                f.write(f"Device: {self.current_device_data.platform.upper()} - {self.current_device_data.device.get('model', self.current_device_data.device.get('device'))}\n")
+                f.write(f"Created: {datetime.now().isoformat()}\n")
+                f.write("=" * 50 + "\n\n")
+            log(f"{green}[+] Đã lưu: {username} → reg_results.txt{reset}")
         except Exception as e:
-            log(f"{red}[!] Lỗi 2FA: {e}{reset}")
-            return ""
+            log(f"{red}[!] Lỗi lưu file: {e}{reset}")
 
     def change_profile_picture(self, image_url=None):
-        """Đổi avatar từ URL (không dùng file local)"""
+        """Đổi avatar từ URL"""
         try:
             if not image_url:
-                if not self.avatar_urls:
-                    return False
+                if not self.avatar_urls: return False
                 image_url = random.choice(self.avatar_urls)
-            log(f"{yellow}[*] Đổi avatar: {image_url[:60]}...{reset}")
+            log(f"{yellow}[*] Đổi avatar...{reset}")
 
-            # Tải ảnh
             img_resp = requests.get(image_url, timeout=20)
             if img_resp.status_code != 200:
                 log(f"{red}[!] Không tải được ảnh{reset}")
                 return False
             image_data = img_resp.content
-
-            # Detect content type
             ct = img_resp.headers.get('Content-Type', 'image/jpeg')
             ext = '.jpg'
             if 'png' in ct: ext = '.png'
@@ -745,8 +784,7 @@ class InstagramAutoRegister:
             )
             if r.status_code == 200:
                 try:
-                    result = r.json()
-                    if result.get('status') == 'ok':
+                    if r.json().get('status') == 'ok':
                         log(f"{green}[+] Avatar OK{reset}")
                         return True
                 except Exception:
@@ -770,10 +808,10 @@ class InstagramAutoRegister:
                 'x-ig-app-id': '936619743392459',
                 'content-type': 'application/x-www-form-urlencoded',
             }
-            data = {'biography': bio, 'external_url': '', 'chaining_enabled': 'on'}
             r = self.session.post(
                 'https://www.instagram.com/api/v1/web/accounts/edit_profile/',
-                data=data, headers=headers, timeout=30
+                data={'biography': bio, 'external_url': '', 'chaining_enabled': 'on'},
+                headers=headers, timeout=30
             )
             return r.status_code == 200
         except Exception:
@@ -799,7 +837,6 @@ class InstagramAutoRegister:
             log(f"{yellow}[*] Follow @{target_username}...{reset}")
             headers = {
                 'accept': '*/*',
-                'accept-language': 'vi,en;q=0.9',
                 'content-type': 'application/x-www-form-urlencoded',
                 'origin': 'https://www.instagram.com',
                 'referer': f'https://www.instagram.com/{target_username}/',
@@ -813,27 +850,26 @@ class InstagramAutoRegister:
             if pr.status_code == 200:
                 try:
                     user_id = pr.json().get('data', {}).get('user', {}).get('id')
-                except Exception:
-                    pass
+                except Exception: pass
             if not user_id:
-                known = {"instagram": "25025320", "cristiano": "173560420", "leomessi": "427553890", "natgeo": "787132", "therock": "232192182"}
+                known = {"instagram": "25025320", "cristiano": "173560420", "leomessi": "427553890",
+                         "natgeo": "787132", "therock": "232192182", "kyliejenner": "12281817"}
                 user_id = known.get(target_username)
-                if not user_id:
-                    return False
+                if not user_id: return False
             data = {'container_module': 'profile', 'user_id': user_id, 'radio_type': 'wifi-none'}
-            r = self.session.post(f'https://www.instagram.com/api/v1/friendships/create/{user_id}/', data=data, headers=headers, timeout=30)
+            r = self.session.post(f'https://www.instagram.com/api/v1/friendships/create/{user_id}/',
+                                  data=data, headers=headers, timeout=30)
             if r.status_code == 200:
                 try:
                     result = r.json()
                     if 'checkpoint_required' in str(result) and 'suspended' in str(result):
-                        log(f"{red}[!] Nick bị checkpoint khi follow{reset}")
+                        log(f"{red}[!] Nick bị checkpoint{reset}")
                         return False
                     if result.get('status') == 'ok' or result.get('friendship_status', {}).get('following') == True:
                         log(f"{green}[+] Follow OK{reset}")
                         return True
                     return True
-                except Exception:
-                    return True
+                except Exception: return True
             return True
         except Exception as e:
             log(f"{red}[!] Follow lỗi: {e}{reset}")
@@ -846,8 +882,7 @@ class InstagramAutoRegister:
             try:
                 self.session.get(f'https://www.instagram.com/{target}/', timeout=30)
                 self.wait_human(3, 7)
-            except Exception:
-                pass
+            except Exception: pass
 
     def is_account_suspended(self, username=None):
         try:
@@ -862,22 +897,20 @@ class InstagramAutoRegister:
         except Exception:
             return False
 
-    def perform_post_registration_actions(self, username):
-        """Warm-up sau khi reg: bio, follow, avatar, 2FA"""
+    def warmup_account(self, username):
+        """Warm-up nhẹ nhàng — giống tool gốc"""
         log(f"{yellow}[+] Warm-up nick {username}...{reset}")
         time.sleep(5)
-        if self.is_account_suspended():
-            return False
+        if self.is_account_suspended(): return False
 
         # Xem feed
         try:
             self.session.get('https://www.instagram.com/', timeout=30)
-            self.wait_human(3, 6)
+            self.wait_human(4, 8)
             self.view_popular_profiles()
-        except Exception:
-            pass
+        except Exception: pass
 
-        # Shuffle actions
+        # Random hoá actions
         actions = []
         if random.random() < 0.7:
             actions.append(('bio', self.generate_random_bio()))
@@ -897,20 +930,22 @@ class InstagramAutoRegister:
             elif act_type == 'avatar':
                 self.change_profile_picture()
                 self.wait_human(8, 18)
-            if self.is_account_suspended():
-                return False
+            if self.is_account_suspended(): return False
 
-        log(f"{green}[+] Warm-up hoàn tất{reset}")
+        log(f"{green}[+] Warm-up OK{reset}")
         return True
 
-    def create_single_account(self, num, total, password):
+    def perform_post_registration_actions(self, username):
+        return self.warmup_account(username)
+
+    def create_single_account(self, num, total, password, nickname_idx):
         log(f"\n{cyan}===== TÀI KHOẢN {num}/{total} ====={reset}")
-        self.create_new_session()
+        self.create_new_session(idx=nickname_idx)
         if not self.get_initial_cookies_and_csrf():
             log(f"{red}[!] Session init fail{reset}")
             return False
 
-        # Lấy email từ pool
+        # Lấy email
         if self.current_email_index >= len(self.emails_pool) * 2:
             email_info = self.email_generator.create_random_email()
             if not email_info:
@@ -943,17 +978,15 @@ class InstagramAutoRegister:
         if r1.status_code != 200:
             return False
 
-        # Kiểm tra trùng username
+        # Retry username if trùng
         try:
             result = r1.json()
             if 'errors' in result and 'username' in str(result['errors']).lower():
                 log(f"{yellow}    Username trùng, thử lại{reset}")
                 username = self.generate_username(first_name)
                 r1 = self.attempt_signup(email, first_name, username, password)
-                if not r1 or r1.status_code != 200:
-                    return False
-        except Exception:
-            pass
+                if not r1 or r1.status_code != 200: return False
+        except Exception: pass
 
         # 2. Check age
         log(f"{yellow}[2/4] Check tuổi...{reset}")
@@ -970,21 +1003,33 @@ class InstagramAutoRegister:
         log(f"{yellow}[3/4] Chờ OTP...{reset}")
         code = self.wait_for_verification_code(email)
         if not code:
-            log(f"{red}[!] Không nhận được OTP{reset}")
-            return False
+            log(f"{red}[!] Không nhận OTP, thử SMS-Man...{reset}")
+            if self.sms_man_token:
+                sms_data = self.sms_man_request()
+                if sms_data:
+                    req_id = sms_data["request_id"]
+                    log(f"{green}[+] Đã mua số, chờ OTP qua SMS...{reset}")
+                    sms_code = self.sms_man_get_code(req_id, timeout=180)
+                    if sms_code:
+                        code = sms_code
+                        self.sms_man_set_status(req_id, "used")
+                    else:
+                        self.sms_man_set_status(req_id, "reject")
+            if not code:
+                log(f"{red}[!] Không lấy được code{reset}")
+                return False
 
-        # 5. Complete signup
+        # 5. Complete
         log(f"{yellow}[4/4] Hoàn tất đăng ký...{reset}")
         success = self.check_and_complete_signup(email, first_name, username, password, code)
         if success:
-            self.account_counter += 1
             return True
         return False
 
     def run(self):
-        """Chạy vòng lặp reg N nick"""
         num_instagram = int(self.config.get("count", 1))
-        password = self.config.get("password_pattern", "Pass{rand}!").replace("{rand}", ''.join(random.choices(string.ascii_letters + string.digits, k=6)))
+        password = self.config.get("password_pattern", "Pass{rand}!").replace(
+            "{rand}", ''.join(random.choices(string.ascii_letters + string.digits, k=6)))
 
         log(f"{cyan}[*] Sẽ reg {num_instagram} nick | Password: {password}{reset}")
 
@@ -998,7 +1043,7 @@ class InstagramAutoRegister:
             time.sleep(3)
 
         if not self.emails_pool:
-            log(f"{red}[!] Không tạo được email nào, dừng{reset}")
+            log(f"{red}[!] Không tạo được email, dừng{reset}")
             return
 
         log(f"{green}[+] Đã tạo {len(self.emails_pool)} email{reset}")
@@ -1008,7 +1053,7 @@ class InstagramAutoRegister:
 
         for i in range(max_acc):
             try:
-                if self.create_single_account(i + 1, max_acc, password):
+                if self.create_single_account(i + 1, max_acc, password, nickname_idx=i):
                     successful += 1
                     log(f"{green}[# {i+1}] ✅ THÀNH CÔNG ({successful}/{max_acc}){reset}")
                 else:
@@ -1016,35 +1061,34 @@ class InstagramAutoRegister:
             except Exception as e:
                 log(f"{red}[# {i+1}] LỖI: {e}{reset}")
             if i < max_acc - 1:
-                time.sleep(2)
+                time.sleep(random.uniform(3, 8))
 
         log(f"\n{cyan}===== KẾT QUẢ: {successful}/{max_acc} nick thành công ====={reset}")
-        log(f"{yellow}[*] File kết quả: reg_results.txt (format: username|password|2fa|cookie){reset}")
+        log(f"{yellow}[*] File kết quả: reg_results.txt (username|password|2fa|cookie){reset}")
+        log(f"{yellow}[*] File chi tiết: reg_details.txt{reset}")
 
 
-# ================= MAIN =================
 def main():
     log(f"{cyan}===== IG REG TOOL START ====={reset}")
 
     config = {}
     try:
-        log("Đang nhận config từ web...")
+        log("Nhận config từ web...")
         config_raw = input().strip()
         config = json.loads(config_raw) if config_raw else {}
     except Exception as e:
         log(f"{red}[!] Không nhận được config: {e}{reset}")
         config = {
-            "email_provider": "mailtm",
-            "avatar_urls": [],
-            "proxies": [],
-            "count": 1,
-            "password_pattern": "Pass{rand}!",
+            "avatar_urls": [], "proxies": [], "count": 1,
+            "password_pattern": "Pass{rand}!", "sms_man_token": "",
+            "country_id": "0", "app_id": "12",
         }
 
-    log(f"{green}[+] Config nhận được:{reset}")
+    log(f"{green}[+] Config:{reset}")
     log(f"    - Số nick: {config.get('count', 1)}")
     log(f"    - Số avatar: {len(config.get('avatar_urls', []))}")
     log(f"    - Số proxy: {len(config.get('proxies', []))}")
+    log(f"    - SMS-Man: {'Có' if config.get('sms_man_token') else 'Không'}")
 
     try:
         tool = InstagramAutoRegister(config)
@@ -1066,7 +1110,7 @@ if __name__ == "__main__":
 EMBEDDED_TOOLS = {
     "igreg": {
         "name": "IG Reg Tool",
-        "desc": "Tool đăng ký tài khoản Instagram hàng loạt qua Web API + Email 10p",
+        "desc": "Reg Instagram hàng loạt — Web API + máy ảo + proxy cố định + SMS-Man",
         "color": "#ec4899",
         "filename": "igreg.py",
         "code": TOOL_CODE_IG_REG,
@@ -1302,11 +1346,18 @@ def api_test_proxy():
 
 @app.route('/api/download-results')
 def download_results():
-    from flask import send_file
     path = os.path.join(TEMP_TOOLS_DIR, "reg_results.txt")
     if not os.path.exists(path):
         return "Chưa có file kết quả", 404
     return send_file(path, as_attachment=True, download_name="reg_results.txt")
+
+
+@app.route('/api/download-details')
+def download_details():
+    path = os.path.join(TEMP_TOOLS_DIR, "reg_details.txt")
+    if not os.path.exists(path):
+        return "Chưa có file chi tiết", 404
+    return send_file(path, as_attachment=True, download_name="reg_details.txt")
 
 
 @app.route('/api/view-results')
@@ -1317,13 +1368,9 @@ def view_results():
     try:
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
-        return f"<pre style='color:#0f0;background:#000;padding:20px;font-size:14px'>{content}</pre>"
+        return f"<pre style='color:#0f0;background:#000;padding:20px;font-size:13px'>{content}</pre>"
     except Exception as e:
         return f"Lỗi: {e}"
-
-
-import requests
-requests.packages.urllib3.disable_warnings()
 
 
 @socketio.on('join')
@@ -1337,7 +1384,7 @@ def on_join(data):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 60)
-    print(" 🚀 TA TOOL WEB — IG REG MANAGER (Web API)")
+    print(" 🚀 TA TOOL WEB — IG REG MANAGER")
     print(f" 📁 Temp tools: {TEMP_TOOLS_DIR}")
     print(f" 🌐 Port: {port}")
     print(f" 📦 Tools: {list(EMBEDDED_TOOLS.keys())}")
