@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚀 IG REG MANAGER — TA TOOL</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app">
+    <header class="header">
+        <div class="logo">
+            <span class="logo-icon">🚀</span>
+            <div>
+                <h1>IG REG MANAGER</h1>
+                <p class="subtitle">Tool đăng ký Instagram hàng loạt — TA Tool — MoMo: 0373607456</p>
+            </div>
+        </div>
+        <div class="header-info">
+            <div class="clock" id="clock">--:--:--</div>
+            <div class="color-picker-wrap">
+                <label for="theme-color" title="Đổi màu chủ đạo">
+                    <span class="picker-icon">🎨</span>
+                </label>
+                <input type="color" id="theme-color" value="#ec4899" title="Đổi màu chủ đạo">
+            </div>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        {% for key, info in tools.items() %}
+        <button class="tab-btn" data-tool="{{ key }}" style="--tab-color: {{ info.color }}">
+            <span class="tab-dot"></span>
+            {{ info.name }}
+        </button>
+        {% endfor %}
+    </nav>
+
+    <main class="content">
+        {% for key, info in tools.items() %}
+        {% set safe_key = key | replace('.', '_') %}
+        <section class="tool-panel" data-tool="{{ key }}" data-safe="{{ safe_key }}" style="--panel-color: {{ info.color }}">
+
+            <!-- Canvas hiệu ứng CHO FORM -->
+            <canvas class="fx-canvas-form"></canvas>
+
+            <div class="config-form" id="form-{{ safe_key }}">
+                <div class="form-title">⚙️ CẤU HÌNH — {{ info.name }}</div>
+
+                <!-- SMS-Man -->
+                <div class="form-row">
+                    <label>🔑 SMS-Man Token <small>(để trống = dùng VeePN/MyTempSMS free)</small>:</label>
+                    <input type="text" class="cfg-input cfg-sms-token" placeholder="Bearer token từ sms-man.com (nếu có)" autocomplete="off">
+                </div>
+
+                <div class="form-row form-row-inline">
+                    <label>🌍 SMS Country + App ID:</label>
+                    <div class="inline-inputs">
+                        <span>Country ID <input type="text" class="cfg-input cfg-country-id" value="0" style="width:80px"></span>
+                        <span>App ID <input type="text" class="cfg-input cfg-app-id" value="12" style="width:80px"></span>
+                        <span style="color:var(--text-dim);font-size:11px">(Xem app IG trên sms-man dashboard)</span>
+                    </div>
+                </div>
+
+                <!-- Email provider -->
+                <div class="form-row">
+                    <label>📧 Email Provider:</label>
+                    <div class="checkbox-group">
+                        <label class="cb-item"><input type="checkbox" class="cfg-email cfg-email-1secmail" checked> 1secmail</label>
+                        <label class="cb-item"><input type="checkbox" class="cfg-email cfg-email-mailtm" checked> mail.tm</label>
+                    </div>
+                </div>
+
+                <!-- Proxy list -->
+                <div class="form-row">
+                    <label>🌐 Danh sách Proxy <small>(mỗi dòng: <code>ip:port:user:pass</code> hoặc <code>user:pass@ip:port</code>)</small>:</label>
+                    <textarea class="cfg-input cfg-proxies" rows="4" placeholder="123.45.67.89:8080:user:pass&#10;user2:pass2@98.76.54.32:3128"></textarea>
+                </div>
+
+                <!-- Avatar URLs -->
+                <div class="form-row">
+                    <label>🖼️ Danh sách URL ảnh avatar <small>(mỗi dòng 1 URL ảnh)</small>:</label>
+                    <textarea class="cfg-input cfg-avatars" rows="4" placeholder="https://i.imgur.com/abc.jpg&#10;https://i.imgur.com/def.jpg"></textarea>
+                </div>
+
+                <!-- Captions -->
+                <div class="form-row">
+                    <label>📝 Danh sách Caption <small>(mỗi dòng 1 caption, tool sẽ random 3 caption cho 3 bài)</small>:</label>
+                    <textarea class="cfg-input cfg-captions" rows="3" placeholder="Hello everyone!&#10;Ngày mới vui vẻ ❤️&#10;Nice day!"></textarea>
+                </div>
+
+                <!-- Username / Password pattern -->
+                <div class="form-row form-row-inline">
+                    <label>👤 Pattern User/Pass:</label>
+                    <div class="inline-inputs">
+                        <span>Username <input type="text" class="cfg-input cfg-username-pattern" value="user{rand}" style="width:150px"></span>
+                        <span>Password <input type="text" class="cfg-input cfg-password-pattern" value="Pass{rand}!" style="width:150px"></span>
+                    </div>
+                </div>
+
+                <!-- Số nick / luồng / delay -->
+                <div class="form-row form-row-inline">
+                    <label>⚙️ Cấu hình chạy:</label>
+                    <div class="inline-inputs">
+                        <span>🔢 Số nick <input type="number" class="cfg-input cfg-count" value="5" min="1" max="500" style="width:80px"></span>
+                        <span>🔀 Số luồng <input type="number" class="cfg-input cfg-threads" value="1" min="1" max="20" style="width:70px"></span>
+                        <span>⏱️ Delay (s) <input type="number" class="cfg-input cfg-delay" value="15" min="5" style="width:70px"></span>
+                    </div>
+                </div>
+
+                <!-- Test proxy -->
+                <div class="form-row form-row-inline">
+                    <label>🧪 Kiểm tra Proxy:</label>
+                    <div class="inline-inputs">
+                        <input type="text" class="cfg-input cfg-test-proxy" placeholder="ip:port:user:pass" style="flex:1">
+                        <button class="btn btn-test-proxy" type="button">Test Proxy</button>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn btn-start" data-tool="{{ key }}"><span class="btn-icon">▶</span> Chạy Reg</button>
+                    <button class="btn btn-stop" data-tool="{{ key }}" disabled><span class="btn-icon">⏹</span> Dừng</button>
+                    <button class="btn btn-clear" data-tool="{{ key }}" disabled><span class="btn-icon">🧹</span> Xóa Log</button>
+                    <button class="btn btn-save" data-tool="{{ key }}" disabled><span class="btn-icon">💾</span> Lưu Log</button>
+                </div>
+            </div>
+
+            <div class="session-info" data-tool="{{ key }}">
+                <span class="badge status-badge idle">● IDLE</span>
+                <span class="session-id"></span>
+                <span class="output-count">0 dòng</span>
+            </div>
+
+            <div class="terminal-wrap">
+                <div class="terminal-header">
+                    <div class="dots"><span></span><span></span><span></span></div>
+                    <div class="term-title">{{ key }}.py — output</div>
+                </div>
+                <div class="terminal" id="term-{{ safe_key }}"></div>
+                <!-- Canvas hiệu ứng CHO TERMINAL -->
+                <canvas class="fx-canvas-term"></canvas>
+            </div>
+
+            <div class="input-bar">
+                <input type="text" class="stdin-input" placeholder="Nhập input thủ công (nếu cần). Enter để gửi" data-tool="{{ key }}" disabled>
+                <button class="btn btn-send" data-tool="{{ key }}" disabled>Gửi ⏎</button>
+            </div>
+        </section>
+        {% endfor %}
+    </main>
+
+    <footer class="footer">
+        <span>© TA TOOL — Donate MoMo: 0373607456</span>
+        <span id="sessions-count">0 sessions</span>
+    </footer>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
