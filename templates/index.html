@@ -13,7 +13,7 @@
             <span class="logo-icon">🚀</span>
             <div>
                 <h1>IG REG MANAGER</h1>
-                <p class="subtitle">Tool đăng ký Instagram hàng loạt — TA Tool — MoMo: 0373607456</p>
+                <p class="subtitle">Reg Instagram + máy ảo + proxy cố định + SMS-Man — TA Tool</p>
             </div>
         </div>
         <div class="header-info">
@@ -41,7 +41,6 @@
         {% set safe_key = key | replace('.', '_') %}
         <section class="tool-panel" data-tool="{{ key }}" data-safe="{{ safe_key }}" style="--panel-color: {{ info.color }}">
 
-            <!-- Canvas hiệu ứng CHO FORM -->
             <canvas class="fx-canvas-form"></canvas>
 
             <div class="config-form" id="form-{{ safe_key }}">
@@ -49,61 +48,45 @@
 
                 <!-- SMS-Man -->
                 <div class="form-row">
-                    <label>🔑 SMS-Man Token <small>(để trống = dùng VeePN/MyTempSMS free)</small>:</label>
-                    <input type="text" class="cfg-input cfg-sms-token" placeholder="Bearer token từ sms-man.com (nếu có)" autocomplete="off">
+                    <label>🔑 SMS-Man Token <small>(để trống nếu chỉ dùng email 10p)</small>:</label>
+                    <input type="text" class="cfg-input cfg-sms-token" placeholder="Bearer token từ sms-man.com" autocomplete="off">
                 </div>
 
                 <div class="form-row form-row-inline">
-                    <label>🌍 SMS Country + App ID:</label>
+                    <label>🌍 SMS-Man Config:</label>
                     <div class="inline-inputs">
                         <span>Country ID <input type="text" class="cfg-input cfg-country-id" value="0" style="width:80px"></span>
                         <span>App ID <input type="text" class="cfg-input cfg-app-id" value="12" style="width:80px"></span>
-                        <span style="color:var(--text-dim);font-size:11px">(Xem app IG trên sms-man dashboard)</span>
+                        <span style="color:var(--text-dim);font-size:11px">(0=Nga, 1=UKR, 6=Indo, 10=VN)</span>
                     </div>
                 </div>
 
-                <!-- Email provider -->
+                <!-- Proxy -->
                 <div class="form-row">
-                    <label>📧 Email Provider:</label>
-                    <div class="checkbox-group">
-                        <label class="cb-item"><input type="checkbox" class="cfg-email cfg-email-1secmail" checked> 1secmail</label>
-                        <label class="cb-item"><input type="checkbox" class="cfg-email cfg-email-mailtm" checked> mail.tm</label>
-                    </div>
-                </div>
-
-                <!-- Proxy list -->
-                <div class="form-row">
-                    <label>🌐 Danh sách Proxy <small>(mỗi dòng: <code>ip:port:user:pass</code> hoặc <code>user:pass@ip:port</code>)</small>:</label>
+                    <label>📋 Danh sách Proxy <small>(mỗi dòng: <code>ip:port:user:pass</code> hoặc <code>user:pass@ip:port</code>)</small>:</label>
                     <textarea class="cfg-input cfg-proxies" rows="4" placeholder="123.45.67.89:8080:user:pass&#10;user2:pass2@98.76.54.32:3128"></textarea>
                 </div>
 
-                <!-- Avatar URLs -->
+                <!-- Avatar -->
                 <div class="form-row">
-                    <label>🖼️ Danh sách URL ảnh avatar <small>(mỗi dòng 1 URL ảnh)</small>:</label>
+                    <label>🖼️ Danh sách URL ảnh avatar <small>(mỗi dòng 1 URL)</small>:</label>
                     <textarea class="cfg-input cfg-avatars" rows="4" placeholder="https://i.imgur.com/abc.jpg&#10;https://i.imgur.com/def.jpg"></textarea>
                 </div>
 
-                <!-- Captions -->
-                <div class="form-row">
-                    <label>📝 Danh sách Caption <small>(mỗi dòng 1 caption, tool sẽ random 3 caption cho 3 bài)</small>:</label>
-                    <textarea class="cfg-input cfg-captions" rows="3" placeholder="Hello everyone!&#10;Ngày mới vui vẻ ❤️&#10;Nice day!"></textarea>
-                </div>
-
-                <!-- Username / Password pattern -->
+                <!-- Pattern -->
                 <div class="form-row form-row-inline">
                     <label>👤 Pattern User/Pass:</label>
                     <div class="inline-inputs">
-                        <span>Username <input type="text" class="cfg-input cfg-username-pattern" value="user{rand}" style="width:150px"></span>
-                        <span>Password <input type="text" class="cfg-input cfg-password-pattern" value="Pass{rand}!" style="width:150px"></span>
+                        <span>Username <input type="text" class="cfg-input cfg-username" value="user{rand}" style="width:150px"></span>
+                        <span>Password <input type="text" class="cfg-input cfg-password" value="Pass{rand}!" style="width:150px"></span>
                     </div>
                 </div>
 
-                <!-- Số nick / luồng / delay -->
+                <!-- Config chạy -->
                 <div class="form-row form-row-inline">
                     <label>⚙️ Cấu hình chạy:</label>
                     <div class="inline-inputs">
                         <span>🔢 Số nick <input type="number" class="cfg-input cfg-count" value="5" min="1" max="500" style="width:80px"></span>
-                        <span>🔀 Số luồng <input type="number" class="cfg-input cfg-threads" value="1" min="1" max="20" style="width:70px"></span>
                         <span>⏱️ Delay (s) <input type="number" class="cfg-input cfg-delay" value="15" min="5" style="width:70px"></span>
                     </div>
                 </div>
@@ -117,11 +100,25 @@
                     </div>
                 </div>
 
+                <!-- Nút hành động -->
                 <div class="form-actions">
                     <button class="btn btn-start" data-tool="{{ key }}"><span class="btn-icon">▶</span> Chạy Reg</button>
                     <button class="btn btn-stop" data-tool="{{ key }}" disabled><span class="btn-icon">⏹</span> Dừng</button>
                     <button class="btn btn-clear" data-tool="{{ key }}" disabled><span class="btn-icon">🧹</span> Xóa Log</button>
                     <button class="btn btn-save" data-tool="{{ key }}" disabled><span class="btn-icon">💾</span> Lưu Log</button>
+                </div>
+
+                <!-- Nút tải kết quả -->
+                <div class="form-actions" style="border-top: 1px solid var(--green); margin-top: 8px;">
+                    <a href="/api/download-results" class="btn" style="text-decoration:none;background:linear-gradient(135deg, rgba(34,197,94,0.7), rgba(22,163,74,0.7));border-color:#22c55e;color:#fff" download>
+                        <span class="btn-icon">⬇</span> Tải reg_results.txt (username|password|2fa|cookie)
+                    </a>
+                    <a href="/api/download-details" class="btn" style="text-decoration:none;background:linear-gradient(135deg, rgba(59,130,246,0.7), rgba(37,99,235,0.7));border-color:#3b82f6;color:#fff" download>
+                        <span class="btn-icon">⬇</span> Tải chi tiết (reg_details.txt)
+                    </a>
+                    <a href="/api/view-results" class="btn" style="text-decoration:none;background:rgba(51,65,85,0.6)" target="_blank">
+                        <span class="btn-icon">👁</span> Xem online
+                    </a>
                 </div>
             </div>
 
@@ -137,7 +134,6 @@
                     <div class="term-title">{{ key }}.py — output</div>
                 </div>
                 <div class="terminal" id="term-{{ safe_key }}"></div>
-                <!-- Canvas hiệu ứng CHO TERMINAL -->
                 <canvas class="fx-canvas-term"></canvas>
             </div>
 
